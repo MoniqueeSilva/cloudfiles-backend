@@ -74,7 +74,7 @@ public class ArquivoController {
         if (arquivo.getSize() > tamanhoMaximo) {
             throw new UploadException(
                     "O arquivo excede o limite de 10 MB.",
-                    HttpStatus.PAYLOAD_TOO_LARGE
+                    HttpStatus.CONTENT_TOO_LARGE
             );
         }
 

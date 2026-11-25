@@ -29,7 +29,7 @@ public class GlobalExceptionHandler {
             MaxUploadSizeExceededException exception) {
 
         return ResponseEntity
-                .status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .status(HttpStatus.CONTENT_TOO_LARGE)
                 .body(Map.of("erro", "O arquivo excede o limite de 10 MB."));
     }
 
