@@ -14,11 +14,16 @@ import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
+import software.amazon.awssdk.services.s3.model.MetadataDirective;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -57,15 +62,12 @@ public class S3Service {
                             arquivo.getContentType() != null
                                     ? arquivo.getContentType()
                                     : "application/octet-stream")
-                    .metadata(java.util.Map.of(
-                            "nome-original", nomeCodificado))
+                    .metadata(Map.of("nome-original", nomeCodificado))
                     .build();
 
             s3Client.putObject(
                     request,
-                    RequestBody.fromInputStream(
-                            arquivo.getInputStream(),
-                            arquivo.getSize()));
+                    RequestBody.fromInputStream(arquivo.getInputStream(), arquivo.getSize()));
 
             String url = gerarUrlCloudFront(key);
 
@@ -82,7 +84,6 @@ public class S3Service {
     }
 
     public List<ArquivoResponseDTO> listarArquivos() {
-
         List<ArquivoResponseDTO> arquivos = new ArrayList<>();
 
         ListObjectsV2Request request = ListObjectsV2Request.builder()
@@ -95,7 +96,6 @@ public class S3Service {
             response = s3Client.listObjectsV2(request);
 
             for (S3Object objeto : response.contents()) {
-
                 HeadObjectResponse detalhes = s3Client.headObject(
                         HeadObjectRequest.builder()
                                 .bucket(bucketName)
@@ -130,6 +130,54 @@ public class S3Service {
         } while (response.isTruncated());
 
         return arquivos;
+    }
+
+    // NOVO: Buscar um arquivo específico pelo ID
+    public ArquivoResponseDTO buscarPorId(String id) {
+        try {
+            HeadObjectResponse detalhes = s3Client.headObject(
+                    HeadObjectRequest.builder().bucket(bucketName).key(id).build());
+
+            String nomeOriginal = detalhes.metadata().getOrDefault("nome-original", id);
+            try {
+                nomeOriginal = new String(Base64.getDecoder().decode(nomeOriginal), java.nio.charset.StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException e) { /* Mantém */ }
+
+            String url = gerarUrlCloudFront(id);
+            return new ArquivoResponseDTO(id, nomeOriginal, url, detalhes.contentLength(), detalhes.contentType());
+
+        } catch (NoSuchKeyException e) {
+            return null; // Retorna null para o Controller tratar como 404
+        }
+    }
+
+    // NOVO: Renomear o arquivo (atualiza o metadado)
+    public ArquivoResponseDTO renomear(String id, String novoNome) {
+        HeadObjectResponse detalhes = s3Client.headObject(
+                HeadObjectRequest.builder().bucket(bucketName).key(id).build());
+
+        String novoNomeCodificado = Base64.getEncoder()
+                .encodeToString(novoNome.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        CopyObjectRequest copyRequest = CopyObjectRequest.builder()
+                .sourceBucket(bucketName)
+                .sourceKey(id)
+                .destinationBucket(bucketName)
+                .destinationKey(id)
+                .metadata(Map.of("nome-original", novoNomeCodificado))
+                .metadataDirective(MetadataDirective.REPLACE)
+                .contentType(detalhes.contentType())
+                .build();
+
+        s3Client.copyObject(copyRequest);
+
+        String url = gerarUrlCloudFront(id);
+        return new ArquivoResponseDTO(id, novoNome, url, detalhes.contentLength(), detalhes.contentType());
+    }
+
+    // NOVO: Deletar um arquivo
+    public void deletar(String id) {
+        s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucketName).key(id).build());
     }
 
     private String gerarUrlCloudFront(String key) {
