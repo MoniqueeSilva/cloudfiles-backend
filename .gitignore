@@ -1,0 +1,14 @@
+# Java / Maven
+target/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Sistema
+.DS_Store
+
+# Credenciais locais
+*.env
+.env
