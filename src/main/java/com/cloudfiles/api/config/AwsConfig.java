@@ -37,7 +37,7 @@ public class AwsConfig {
             credentialsProvider = StaticCredentialsProvider.create(credentials);
 
         } else {
-            credentialsProvider = DefaultCredentialsProvider.create();
+            credentialsProvider = DefaultCredentialsProvider.builder().build();
         }
 
         return S3Client.builder()
